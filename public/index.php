@@ -1,8 +1,9 @@
 <?php
 // public/index.php
+
 require_once __DIR__ . '/../config/db.php';
 
-// 1. Build a map of month number => month name
+// Array mapping numeric month to month name
 $months = [
     1 => "January",
     2 => "February",
@@ -18,49 +19,49 @@ $months = [
     12 => "December"
 ];
 
-// 2. Grab month/year from query params (default to current month/year)
+// Get selected month/year from GET (default to current)
 $selectedMonth = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 $selectedYear  = isset($_GET['year'])  ? (int)$_GET['year']  : date('Y');
 
-// Queries for SALE and PURCHASE
+// Prepare arrays for sale & purchase invoices
 $saleInvoices = [];
 $purchaseInvoices = [];
 
 try {
-    // SALE
+    // Fetch SALE
     $stmtSale = $pdo->prepare("
         SELECT *
-          FROM invoices
-         WHERE invoice_type = 'SALE'
-           AND MONTH(invoice_date) = :m
-           AND YEAR(invoice_date)  = :y
-         ORDER BY invoice_date ASC
+        FROM invoices
+        WHERE invoice_type = 'SALE'
+          AND MONTH(invoice_date) = :m
+          AND YEAR(invoice_date)  = :y
+        ORDER BY invoice_date ASC
     ");
-    $stmtSale->execute([
-        ':m' => $selectedMonth,
-        ':y' => $selectedYear
-    ]);
+    $stmtSale->execute([':m' => $selectedMonth, ':y' => $selectedYear]);
     $saleInvoices = $stmtSale->fetchAll(PDO::FETCH_ASSOC);
 
-    // PURCHASE
+    // Fetch PURCHASE
     $stmtPurchase = $pdo->prepare("
         SELECT *
-          FROM invoices
-         WHERE invoice_type = 'PURCHASE'
-           AND MONTH(invoice_date) = :m
-           AND YEAR(invoice_date)  = :y
-         ORDER BY invoice_date ASC
+        FROM invoices
+        WHERE invoice_type = 'PURCHASE'
+          AND MONTH(invoice_date) = :m
+          AND YEAR(invoice_date)  = :y
+        ORDER BY invoice_date ASC
     ");
-    $stmtPurchase->execute([
-        ':m' => $selectedMonth,
-        ':y' => $selectedYear
-    ]);
+    $stmtPurchase->execute([':m' => $selectedMonth, ':y' => $selectedYear]);
     $purchaseInvoices = $stmtPurchase->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
     echo "Error fetching invoices: " . $e->getMessage();
     exit;
 }
+
+// Build a download URL to our FPDF script, passing the same month/year
+$downloadUrl = "download_invoices_fpdf.php?month={$selectedMonth}&year={$selectedYear}";
+
+// For display
+$monthName = $months[$selectedMonth] ?? '';
 ?>
 <!DOCTYPE html>
 <html>
@@ -71,13 +72,17 @@ try {
 <body>
     <h1>Invoicing Home</h1>
 
-    <p><a href="create_invoice.php">Create New Invoice</a></p>
+    <!-- Link to create a new invoice -->
+    <p>
+        <a href="create_invoice.php">Create New Invoice</a>
+    </p>
 
     <!-- Form to select month/year -->
     <form method="GET" action="index.php">
         <label for="month">Month:</label>
         <select name="month" id="month">
             <?php
+            // Generate month options
             foreach ($months as $num => $name) {
                 $selected = ($num == $selectedMonth) ? 'selected' : '';
                 echo "<option value='$num' $selected>$name</option>";
@@ -91,10 +96,17 @@ try {
         <button type="submit">Show Invoices</button>
     </form>
 
+    <!-- PDF Download Button using FPDF -->
+    <p>
+        <a href="<?php echo $downloadUrl; ?>">
+            <button type="button">Download PDF (FPDF) for <?php echo $monthName . " " . $selectedYear; ?></button>
+        </a>
+    </p>
+
     <hr>
 
-    <!-- SALE Invoices -->
-    <h2>SALE Invoices for <?php echo $months[$selectedMonth] . " " . $selectedYear; ?></h2>
+    <!-- SALE Invoices Section -->
+    <h2>SALE Invoices for <?php echo $monthName . " " . $selectedYear; ?></h2>
     <?php if (!empty($saleInvoices)): ?>
         <table border="1" cellpadding="6">
             <tr>
@@ -108,9 +120,8 @@ try {
                 <th>SGST</th>
                 <th>Total</th>
             </tr>
-
             <?php
-            // Initialize sum variables
+            // Summation
             $sumTaxableSale = 0;
             $sumCgstSale    = 0;
             $sumSgstSale    = 0;
@@ -122,20 +133,20 @@ try {
                 $sumSgstSale    += $inv['sgst'];
                 $sumTotalSale   += $inv['total'];
             ?>
-                <tr>
-                    <td><?php echo $inv['id']; ?></td>
-                    <td><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
-                    <td><?php echo $inv['invoice_date']; ?></td>
-                    <td><?php echo htmlspecialchars($inv['customer_name']); ?></td>
-                    <td><?php echo htmlspecialchars($inv['customer_gstin']); ?></td>
-                    <td><?php echo $inv['taxable_amount']; ?></td>
-                    <td><?php echo $inv['cgst']; ?></td>
-                    <td><?php echo $inv['sgst']; ?></td>
-                    <td><?php echo $inv['total']; ?></td>
-                </tr>
+            <tr>
+                <td><?php echo $inv['id']; ?></td>
+                <td><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
+                <td><?php echo $inv['invoice_date']; ?></td>
+                <td><?php echo htmlspecialchars($inv['customer_name']); ?></td>
+                <td><?php echo htmlspecialchars($inv['customer_gstin']); ?></td>
+                <td><?php echo $inv['taxable_amount']; ?></td>
+                <td><?php echo $inv['cgst']; ?></td>
+                <td><?php echo $inv['sgst']; ?></td>
+                <td><?php echo $inv['total']; ?></td>
+            </tr>
             <?php endforeach; ?>
 
-            <!-- TOTAL row for SALE -->
+            <!-- Totals Row -->
             <tr style="font-weight:bold;">
                 <td colspan="5" align="right">TOTAL:</td>
                 <td><?php echo number_format($sumTaxableSale, 2); ?></td>
@@ -150,8 +161,8 @@ try {
 
     <hr>
 
-    <!-- PURCHASE Invoices -->
-    <h2>PURCHASE Invoices for <?php echo $months[$selectedMonth] . " " . $selectedYear; ?></h2>
+    <!-- PURCHASE Invoices Section -->
+    <h2>PURCHASE Invoices for <?php echo $monthName . " " . $selectedYear; ?></h2>
     <?php if (!empty($purchaseInvoices)): ?>
         <table border="1" cellpadding="6">
             <tr>
@@ -166,9 +177,8 @@ try {
                 <th>SGST</th>
                 <th>Total</th>
             </tr>
-
             <?php
-            // Initialize sum variables
+            // Summation
             $sumTaxablePur = 0;
             $sumCgstPur    = 0;
             $sumSgstPur    = 0;
@@ -180,21 +190,21 @@ try {
                 $sumSgstPur    += $inv['sgst'];
                 $sumTotalPur   += $inv['total'];
             ?>
-                <tr>
-                    <td><?php echo $inv['id']; ?></td>
-                    <td><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
-                    <td><?php echo $inv['invoice_date']; ?></td>
-                    <td><?php echo htmlspecialchars($inv['customer_name']); ?></td>
-                    <td><?php echo htmlspecialchars($inv['customer_gstin']); ?></td>
-                    <td><?php echo htmlspecialchars($inv['commodity']); ?></td> <!-- commodity only for PURCHASE -->
-                    <td><?php echo $inv['taxable_amount']; ?></td>
-                    <td><?php echo $inv['cgst']; ?></td>
-                    <td><?php echo $inv['sgst']; ?></td>
-                    <td><?php echo $inv['total']; ?></td>
-                </tr>
+            <tr>
+                <td><?php echo $inv['id']; ?></td>
+                <td><?php echo htmlspecialchars($inv['invoice_number']); ?></td>
+                <td><?php echo $inv['invoice_date']; ?></td>
+                <td><?php echo htmlspecialchars($inv['customer_name']); ?></td>
+                <td><?php echo htmlspecialchars($inv['customer_gstin']); ?></td>
+                <td><?php echo htmlspecialchars($inv['commodity']); ?></td>
+                <td><?php echo $inv['taxable_amount']; ?></td>
+                <td><?php echo $inv['cgst']; ?></td>
+                <td><?php echo $inv['sgst']; ?></td>
+                <td><?php echo $inv['total']; ?></td>
+            </tr>
             <?php endforeach; ?>
 
-            <!-- TOTAL row for PURCHASE -->
+            <!-- Totals Row -->
             <tr style="font-weight:bold;">
                 <td colspan="6" align="right">TOTAL:</td>
                 <td><?php echo number_format($sumTaxablePur, 2); ?></td>
