@@ -8,11 +8,13 @@ require_once __DIR__ . '/../config/db.php';
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Invoicing Website</title>
+    <title>Invoicing Home</title>
 </head>
 <body>
-    <h1>Welcome to Swaraj’s Invoicing Website</h1>
-    <p>This is a placeholder. We will add more features soon!</p>
-    <a href="create_invoice.php">Create New Invoice</a>
+    <h1>Invoicing Home</h1>
+    <ul>
+        <li><a href="create_invoice.php">Create New Invoice</a></li>
+        <!-- You can add more links, e.g. view invoices, etc. -->
+    </ul>
 </body>
 </html>
