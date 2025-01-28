@@ -2,19 +2,19 @@
 // public/export_excel.php
 
 require __DIR__ . '/../config/db.php';
-
-// Include Composer autoloader for PhpSpreadsheet
-require __DIR__ . '/../vendor/autoload.php';
+require __DIR__ . '/../vendor/autoload.php'; // PhpSpreadsheet autoloader
 
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
-// 1) Grab month/year from GET
+// 1) Grab month/year
 $selectedMonth = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 $selectedYear  = isset($_GET['year'])  ? (int)$_GET['year']  : date('Y');
 
-// 2) Query DB for SALE & PURCHASE
+// 2) Query DB
 $saleInvoices = [];
 $purchaseInvoices = [];
 
@@ -45,87 +45,104 @@ try {
     die("Error fetching data: " . $e->getMessage());
 }
 
-// 3) Create Spreadsheet object
+// 3) Create a new Spreadsheet
 $spreadsheet = new Spreadsheet();
 $spreadsheet->getProperties()
-            ->setCreator("My Invoicing App")
-            ->setTitle("Invoices Export");
+            ->setCreator("Invoicing App")
+            ->setTitle("Monthly Invoices Export");
 
-// ----- SALE SHEET -----
+// ========== SALE SHEET ==========
 $saleSheet = $spreadsheet->setActiveSheetIndex(0);
 $saleSheet->setTitle('Sale Invoices');
 
-// Define headers for SALE
 $headersSale = [
-    'ID', 'Invoice Number', 'Invoice Date', 'Customer Name',
-    'GSTIN', 'Taxable Amount', 'CGST', 'SGST', 'Total'
+    'ID', 'Invoice No.', 'Date', 'Customer', 'GSTIN',
+    'Taxable', 'CGST', 'SGST', 'Total'
 ];
 
-// Write SALE headers in row 1
 $rowNum = 1;
 $colNum = 1;
+
+// Write the header row
 foreach ($headersSale as $header) {
     $colLetter = Coordinate::stringFromColumnIndex($colNum);
     $saleSheet->setCellValue($colLetter.$rowNum, $header);
     $colNum++;
 }
 
-// Write SALE data starting row 2
-$rowNum = 2;
+// Make the header row bold
+$headerRange = "A1:I1"; // 9 columns: A through I
+$saleSheet->getStyle($headerRange)->getFont()->setBold(true);
+
+// Write data + compute totals
+$sumTaxable = 0;
+$sumCgst    = 0;
+$sumSgst    = 0;
+$sumTotal   = 0;
+
+$rowNum = 2; // data starts on row 2
 foreach ($saleInvoices as $inv) {
-    // Reset column to 1 for each row
     $colNum = 1;
 
-    // 1) ID
+    $sumTaxable += $inv['taxable_amount'];
+    $sumCgst    += $inv['cgst'];
+    $sumSgst    += $inv['sgst'];
+    $sumTotal   += $inv['total'];
+
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['id']);
 
-    // 2) Invoice Number
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['invoice_number']);
 
-    // 3) Invoice Date
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['invoice_date']);
 
-    // 4) Customer Name
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['customer_name']);
 
-    // 5) GSTIN
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['customer_gstin']);
 
-    // 6) Taxable Amount
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['taxable_amount']);
 
-    // 7) CGST
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['cgst']);
 
-    // 8) SGST
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['sgst']);
 
-    // 9) Total
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $saleSheet->setCellValue($colLetter.$rowNum, $inv['total']);
 
     $rowNum++;
 }
 
-// ----- PURCHASE SHEET -----
+// Totals row (bold)
+$colLetter = "E"; // for example, we want "TOTAL:" to appear in col E
+$saleSheet->setCellValue("{$colLetter}{$rowNum}", "TOTAL:");
+$saleSheet->getStyle("{$colLetter}{$rowNum}")->getFont()->setBold(true);
+$saleSheet->getStyle("{$colLetter}{$rowNum}")->getAlignment()->setHorizontal('right');
+
+// Now the numeric totals go in columns F, G, H, I
+$saleSheet->setCellValue("F{$rowNum}", $sumTaxable);
+$saleSheet->setCellValue("G{$rowNum}", $sumCgst);
+$saleSheet->setCellValue("H{$rowNum}", $sumSgst);
+$saleSheet->setCellValue("I{$rowNum}", $sumTotal);
+
+// Make the numeric cells bold
+$saleSheet->getStyle("F{$rowNum}:I{$rowNum}")->getFont()->setBold(true);
+
+// ========== PURCHASE SHEET ==========
 $purchaseSheet = $spreadsheet->createSheet();
 $purchaseSheet->setTitle('Purchase Invoices');
 
-// Define headers for PURCHASE
 $headersPur = [
-    'ID', 'Invoice Number', 'Invoice Date', 'Customer Name',
-    'GSTIN', 'Commodity', 'Taxable Amount', 'CGST', 'SGST', 'Total'
+    'ID', 'Invoice No.', 'Date', 'Customer', 'GSTIN',
+    'Commodity', 'Taxable', 'CGST', 'SGST', 'Total'
 ];
 
-// Write PURCHASE headers
 $rowNum = 1;
 $colNum = 1;
 foreach ($headersPur as $header) {
@@ -134,55 +151,71 @@ foreach ($headersPur as $header) {
     $colNum++;
 }
 
-// Write PURCHASE data
+// Bold the header row
+$purchaseSheet->getStyle("A1:J1")->getFont()->setBold(true);
+
+$sumTaxablePur = 0;
+$sumCgstPur = 0;
+$sumSgstPur = 0;
+$sumTotalPur = 0;
+
 $rowNum = 2;
 foreach ($purchaseInvoices as $inv) {
     $colNum = 1;
 
-    // 1) ID
+    $sumTaxablePur += $inv['taxable_amount'];
+    $sumCgstPur    += $inv['cgst'];
+    $sumSgstPur    += $inv['sgst'];
+    $sumTotalPur   += $inv['total'];
+
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['id']);
 
-    // 2) Invoice Number
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['invoice_number']);
 
-    // 3) Invoice Date
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['invoice_date']);
 
-    // 4) Customer Name
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['customer_name']);
 
-    // 5) GSTIN
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['customer_gstin']);
 
-    // 6) Commodity
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['commodity']);
 
-    // 7) Taxable Amount
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['taxable_amount']);
 
-    // 8) CGST
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['cgst']);
 
-    // 9) SGST
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['sgst']);
 
-    // 10) Total
     $colLetter = Coordinate::stringFromColumnIndex($colNum++);
     $purchaseSheet->setCellValue($colLetter.$rowNum, $inv['total']);
 
     $rowNum++;
 }
 
-// Optional: auto-size columns for each sheet
+// Totals row
+$colLetter = "F";  // "TOTAL:" label appears in column F (just an example)
+$purchaseSheet->setCellValue("{$colLetter}{$rowNum}", "TOTAL:");
+$purchaseSheet->getStyle("{$colLetter}{$rowNum}")->getFont()->setBold(true);
+$purchaseSheet->getStyle("{$colLetter}{$rowNum}")->getAlignment()->setHorizontal('right');
+
+$purchaseSheet->setCellValue("G{$rowNum}", $sumTaxablePur);
+$purchaseSheet->setCellValue("H{$rowNum}", $sumCgstPur);
+$purchaseSheet->setCellValue("I{$rowNum}", $sumSgstPur);
+$purchaseSheet->setCellValue("J{$rowNum}", $sumTotalPur);
+
+// Make them bold
+$purchaseSheet->getStyle("G{$rowNum}:J{$rowNum}")->getFont()->setBold(true);
+
+// Optional auto-size columns for each sheet
 foreach ([$saleSheet, $purchaseSheet] as $sheet) {
     $highestCol = $sheet->getHighestColumn();
     $highestColIndex = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::columnIndexFromString($highestCol);

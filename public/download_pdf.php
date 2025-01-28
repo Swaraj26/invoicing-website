@@ -3,7 +3,7 @@
 
 require __DIR__ . '/../config/db.php';
 
-// Include Composer's autoloader for mPDF
+// If you have a modern mPDF with Composer’s autoloader:
 require __DIR__ . '/../vendor/autoload.php';
 
 use Mpdf\Mpdf;
@@ -12,7 +12,7 @@ use Mpdf\Mpdf;
 $selectedMonth = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 $selectedYear  = isset($_GET['year'])  ? (int)$_GET['year']  : date('Y');
 
-// 2) Query the DB
+// 2) Query DB for SALE & PURCHASE
 $saleInvoices = [];
 $purchaseInvoices = [];
 
@@ -43,88 +43,135 @@ try {
     die("Error fetching invoices: " . $e->getMessage());
 }
 
-// 3) Build the HTML content
-// We'll keep it simple with inline CSS to ensure everything fits nicely.
+// 3) Build HTML
 $monthName = date('F', mktime(0, 0, 0, $selectedMonth, 1));
 $title = "Invoices for {$monthName} {$selectedYear}";
 
-// We'll create a function to build a table for each invoice type
-function buildTable($title, $invoices, $isPurchase = false) {
-    // Decide columns based on purchase or sale
-    $commodityCol = $isPurchase ? "<th style='width:120px;'>Commodity</th>" : "";
-    $commodityCell = $isPurchase ? "<td style='border:1px solid #000; padding:6px;'>{COMMODITY}</td>" : "";
-
-    // Start HTML
-    $html = "<h3 style='margin-top:20px;'>{$title}</h3>";
+// We'll create separate HTML blocks for Sale and Purchase
+function buildSaleTable($invoices) {
     if (count($invoices) === 0) {
-        $html .= "<p>No {$title} found for this month/year.</p>";
-        return $html;
+        return "<h3>SALE Invoices</h3><p>No SALE invoices found for this month/year.</p>";
     }
 
-    // Table header
-    $html .= "<table style='width:100%; border-collapse:collapse; margin-top:10px;'>
-                <thead>
-                  <tr style='background:#f0f0f0;'>
-                    <th style='border:1px solid #000; padding:6px;'>ID</th>
-                    <th style='border:1px solid #000; padding:6px;'>Invoice No.</th>
-                    <th style='border:1px solid #000; padding:6px;'>Date</th>
-                    <th style='border:1px solid #000; padding:6px;'>Customer</th>
-                    <th style='border:1px solid #000; padding:6px;'>GSTIN</th>
-                    {$commodityCol}
-                    <th style='border:1px solid #000; padding:6px;'>Taxable</th>
-                    <th style='border:1px solid #000; padding:6px;'>CGST</th>
-                    <th style='border:1px solid #000; padding:6px;'>SGST</th>
-                    <th style='border:1px solid #000; padding:6px;'>Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-            ";
-
-    // Summation
-    $sumTaxable = 0;
-    $sumCgst = 0;
-    $sumSgst = 0;
+    $sumTaxable = 0; 
+    $sumCgst = 0; 
+    $sumSgst = 0; 
     $sumTotal = 0;
 
-    // Table rows
+    // Table header (bold row)
+    $html = "<h3 style='margin-top:20px;'>SALE Invoices</h3>
+    <table style='width:100%; border-collapse:collapse; margin-top:10px; font-size:9pt;'>
+      <thead>
+        <tr style='background:#e1e1e1; font-weight:bold;'>
+          <th style='border:1px solid #000; padding:6px;'>ID</th>
+          <th style='border:1px solid #000; padding:6px;'>Invoice No.</th>
+          <th style='border:1px solid #000; padding:6px;'>Date</th>
+          <th style='border:1px solid #000; padding:6px;'>Customer</th>
+          <th style='border:1px solid #000; padding:6px;'>GSTIN</th>
+          <th style='border:1px solid #000; padding:6px;'>Taxable</th>
+          <th style='border:1px solid #000; padding:6px;'>CGST</th>
+          <th style='border:1px solid #000; padding:6px;'>SGST</th>
+          <th style='border:1px solid #000; padding:6px;'>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+    ";
+
     foreach ($invoices as $inv) {
         $sumTaxable += $inv['taxable_amount'];
         $sumCgst    += $inv['cgst'];
         $sumSgst    += $inv['sgst'];
         $sumTotal   += $inv['total'];
 
-        $commodityCellReplaced = $isPurchase
-            ? str_replace('{COMMODITY}', htmlspecialchars($inv['commodity']), $commodityCell)
-            : "";
-
         $html .= "<tr>
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['id']}</td>
-                    <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['invoice_number'])."</td>
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['invoice_date']}</td>
-                    <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_name'])."</td>
-                    <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_gstin'])."</td>
-                    {$commodityCellReplaced}
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['taxable_amount']}</td>
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['cgst']}</td>
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['sgst']}</td>
-                    <td style='border:1px solid #000; padding:6px;'>{$inv['total']}</td>
-                  </tr>";
+          <td style='border:1px solid #000; padding:6px;'>{$inv['id']}</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['invoice_number'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['invoice_date']}</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_name'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_gstin'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['taxable_amount']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['cgst']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['sgst']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['total']}</td>
+        </tr>";
     }
 
-    // Totals row
-    $colspan = $isPurchase ? 5 : 5; // ID, Invoice, Date, Customer, GSTIN => +1 if commodity
-    if ($isPurchase) $colspan++;    // We add 1 more for commodity column
+    // BOLD totals row
     $html .= "<tr style='font-weight:bold; background:#f9f9f9;'>
-                <td colspan='{$colspan}' style='border:1px solid #000; text-align:right; padding:6px;'>
-                  TOTAL:
-                </td>
-                <td style='border:1px solid #000; padding:6px;'>{$sumTaxable}</td>
-                <td style='border:1px solid #000; padding:6px;'>{$sumCgst}</td>
-                <td style='border:1px solid #000; padding:6px;'>{$sumSgst}</td>
-                <td style='border:1px solid #000; padding:6px;'>{$sumTotal}</td>
-              </tr>";
+      <td colspan='5' style='border:1px solid #000; text-align:right; padding:6px;'>
+        TOTAL:
+      </td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumTaxable}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumCgst}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumSgst}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumTotal}</td>
+    </tr>
+    </tbody></table>";
 
-    $html .= "</tbody></table>";
+    return $html;
+}
+
+function buildPurchaseTable($invoices) {
+    if (count($invoices) === 0) {
+        return "<h3>PURCHASE Invoices</h3><p>No PURCHASE invoices found for this month/year.</p>";
+    }
+
+    $sumTaxable = 0; 
+    $sumCgst = 0; 
+    $sumSgst = 0; 
+    $sumTotal = 0;
+
+    $html = "<h3 style='margin-top:20px;'>PURCHASE Invoices</h3>
+    <table style='width:100%; border-collapse:collapse; margin-top:10px; font-size:9pt;'>
+      <thead>
+        <tr style='background:#e1e1e1; font-weight:bold;'>
+          <th style='border:1px solid #000; padding:6px;'>ID</th>
+          <th style='border:1px solid #000; padding:6px;'>Invoice No.</th>
+          <th style='border:1px solid #000; padding:6px;'>Date</th>
+          <th style='border:1px solid #000; padding:6px;'>Customer</th>
+          <th style='border:1px solid #000; padding:6px;'>GSTIN</th>
+          <th style='border:1px solid #000; padding:6px;'>Commodity</th>
+          <th style='border:1px solid #000; padding:6px;'>Taxable</th>
+          <th style='border:1px solid #000; padding:6px;'>CGST</th>
+          <th style='border:1px solid #000; padding:6px;'>SGST</th>
+          <th style='border:1px solid #000; padding:6px;'>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+    ";
+
+    foreach ($invoices as $inv) {
+        $sumTaxable += $inv['taxable_amount'];
+        $sumCgst    += $inv['cgst'];
+        $sumSgst    += $inv['sgst'];
+        $sumTotal   += $inv['total'];
+
+        $html .= "<tr>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['id']}</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['invoice_number'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['invoice_date']}</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_name'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['customer_gstin'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>".htmlspecialchars($inv['commodity'])."</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['taxable_amount']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['cgst']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['sgst']}</td>
+          <td style='border:1px solid #000; padding:6px;'>{$inv['total']}</td>
+        </tr>";
+    }
+
+    // BOLD totals row
+    $html .= "<tr style='font-weight:bold; background:#f9f9f9;'>
+      <td colspan='6' style='border:1px solid #000; text-align:right; padding:6px;'>
+        TOTAL:
+      </td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumTaxable}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumCgst}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumSgst}</td>
+      <td style='border:1px solid #000; padding:6px;'>{$sumTotal}</td>
+    </tr>
+    </tbody></table>";
+
     return $html;
 }
 
@@ -137,51 +184,45 @@ $html = "
 <style>
   body {
     font-family: DejaVu Sans, sans-serif;
-    font-size: 9pt;
-    margin:0;
-    padding:0;
+    margin:0; padding:0;
+    font-size: 10pt;
   }
   h2, h3 {
-    margin:0;
-    padding:0;
+    margin: 0;
+    padding: 0;
   }
 </style>
 </head>
 <body>
-  <h2>{$title}</h2>
+  <h2 style='margin-bottom:10px;'>{$title}</h2>
   ";
 
-// Build SALE table
-$html .= buildTable("SALE Invoices", $saleInvoices, false);
-// Build PURCHASE table
-$html .= buildTable("PURCHASE Invoices", $purchaseInvoices, true);
+// Sale table
+$html .= buildSaleTable($saleInvoices);
+// Purchase table
+$html .= buildPurchaseTable($purchaseInvoices);
 
 $html .= "
 </body>
 </html>
 ";
 
-// 4) Generate PDF with mPDF
+// 4) Output with mPDF
 try {
-    // Create the Mpdf object
+    // If you have a modern environment with mpdf 7+:
     $mpdf = new Mpdf([
         'format' => 'A4',
-        'orientation' => 'P',
         'margin_left' => 10,
         'margin_right' => 10,
         'margin_top' => 10,
         'margin_bottom' => 10
     ]);
-
-    // Optional: shrink large tables to fit
     $mpdf->shrink_tables_to_fit = 1;
-
-    // Write the HTML
     $mpdf->WriteHTML($html);
 
-    // Output as download
     $fileName = "Invoices_{$monthName}-{$selectedYear}.pdf";
-    $mpdf->Output($fileName, 'D'); // 'D' forces download; use 'I' to open inline
+    $mpdf->Output($fileName, 'D');  // Force download
+    exit;
 } catch (\Mpdf\MpdfException $e) {
     echo "Error generating PDF: " . $e->getMessage();
     exit;
