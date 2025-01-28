@@ -1,23 +1,34 @@
 <?php
+// public/index.php
+
 require_once __DIR__ . '/../config/db.php';
 
-// Array mapping numeric month to month name
+// A simple mapping of numeric month => month name
 $months = [
-    1 => "January",   2 => "February", 3 => "March",    4 => "April",
-    5 => "May",       6 => "June",     7 => "July",     8 => "August",
-    9 => "September", 10 => "October", 11 => "November", 12 => "December"
+    1 => "January",
+    2 => "February",
+    3 => "March",
+    4 => "April",
+    5 => "May",
+    6 => "June",
+    7 => "July",
+    8 => "August",
+    9 => "September",
+    10 => "October",
+    11 => "November",
+    12 => "December"
 ];
 
-// Grab month/year from GET
+// Determine the selected month/year (default to current if not provided)
 $selectedMonth = isset($_GET['month']) ? (int)$_GET['month'] : date('n');
 $selectedYear  = isset($_GET['year'])  ? (int)$_GET['year']  : date('Y');
 
-// Query data
+// Prepare arrays for SALE and PURCHASE
 $saleInvoices = [];
 $purchaseInvoices = [];
 
 try {
-    // SALE
+    // Query SALE invoices for the selected month/year
     $stmtSale = $pdo->prepare("
         SELECT *
           FROM invoices
@@ -29,7 +40,7 @@ try {
     $stmtSale->execute([':m' => $selectedMonth, ':y' => $selectedYear]);
     $saleInvoices = $stmtSale->fetchAll(PDO::FETCH_ASSOC);
 
-    // PURCHASE
+    // Query PURCHASE invoices for the selected month/year
     $stmtPurchase = $pdo->prepare("
         SELECT *
           FROM invoices
@@ -42,52 +53,65 @@ try {
     $purchaseInvoices = $stmtPurchase->fetchAll(PDO::FETCH_ASSOC);
 
 } catch (PDOException $e) {
-    echo "Error: " . $e->getMessage();
+    echo "Error fetching invoices: " . $e->getMessage();
     exit;
 }
 
-// Build a PDF download URL if using FPDF or mPDF
-$downloadUrl = "download_invoices_fpdf.php?month={$selectedMonth}&year={$selectedYear}";
-$monthName = $months[$selectedMonth] ?? '';
+// Build the export URL for Excel
+$exportUrl = "export_excel.php?month={$selectedMonth}&year={$selectedYear}";
+
+// Build the download URL for PDF
+$pdfUrl = "download_pdf.php?month={$selectedMonth}&year={$selectedYear}";
+
+// For display
+$monthName = isset($months[$selectedMonth]) ? $months[$selectedMonth] : '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Invoice Dashboard</title>
-  <!-- Bootstrap CSS (CDN) -->
+  <title>Invoicing Dashboard</title>
+  <!-- Bootstrap (CDN) for styling -->
   <link rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css"
         integrity="sha384-ENjdO4Dr2bkBIFxQpe67Z19qLMxk8t8R2DtacvoB2mqq1GcOAS+P1..."
         crossorigin="anonymous">
 </head>
 <body>
-
 <div class="container my-4">
   <h1 class="mb-4">Invoicing Dashboard</h1>
 
-  <!-- Row with "Create" button and Filter Form -->
-  <div class="row">
+  <!-- Row with "Create New Invoice" + Export Buttons + Filter Form -->
+  <div class="row mb-3">
     <div class="col-md-6 d-flex align-items-center">
+      <!-- Button: Create New Invoice -->
       <a href="create_invoice.php" class="btn btn-primary me-3">
         Create New Invoice
       </a>
-      <!-- PDF Download Button if you have it -->
-      <a href="<?php echo $downloadUrl; ?>" class="btn btn-success">
+
+      <!-- Button: Export as Excel -->
+      <a href="<?php echo $exportUrl; ?>" class="btn btn-success me-3">
+        Export as Excel (<?php echo $monthName . " " . $selectedYear; ?>)
+      </a>
+
+      <!-- Button: Download PDF -->
+      <a href="<?php echo $pdfUrl; ?>" class="btn btn-danger">
         Download PDF (<?php echo $monthName . " " . $selectedYear; ?>)
       </a>
     </div>
+
     <div class="col-md-6">
       <div class="card">
         <div class="card-body">
+          <!-- Filter Form (Month / Year) -->
           <form method="GET" action="index.php" class="row g-2">
             <div class="col-auto">
               <label for="month" class="form-label">Month</label>
               <select name="month" id="month" class="form-select">
                 <?php
-                foreach ($months as $num => $name) {
-                  $selected = ($num == $selectedMonth) ? 'selected' : '';
-                  echo "<option value='$num' $selected>$name</option>";
+                foreach ($months as $num => $mName) {
+                    $selected = ($num == $selectedMonth) ? 'selected' : '';
+                    echo "<option value='$num' $selected>$mName</option>";
                 }
                 ?>
               </select>
@@ -105,16 +129,15 @@ $monthName = $months[$selectedMonth] ?? '';
             </div>
           </form>
         </div>
-      </div><!-- card -->
-    </div><!-- col -->
+      </div>
+    </div>
   </div><!-- row -->
 
   <hr class="my-4">
 
-  <!-- Display the selected month and year in a heading -->
   <h2>Invoices for <?php echo $monthName . " " . $selectedYear; ?></h2>
 
-  <!-- SALE Invoices -->
+  <!-- SALE Invoices Section -->
   <div class="mt-4">
     <h4>SALE Invoices</h4>
     <?php if (!empty($saleInvoices)): ?>
@@ -138,6 +161,7 @@ $monthName = $months[$selectedMonth] ?? '';
         $sumCgstSale    = 0;
         $sumSgstSale    = 0;
         $sumTotalSale   = 0;
+
         foreach ($saleInvoices as $inv):
           $sumTaxableSale += $inv['taxable_amount'];
           $sumCgstSale    += $inv['cgst'];
@@ -156,6 +180,7 @@ $monthName = $months[$selectedMonth] ?? '';
             <td><?php echo number_format($inv['total'], 2); ?></td>
           </tr>
         <?php endforeach; ?>
+          <!-- Totals row -->
           <tr class="fw-bold table-secondary">
             <td colspan="5" class="text-end">TOTAL:</td>
             <td><?php echo number_format($sumTaxableSale, 2); ?></td>
@@ -170,7 +195,7 @@ $monthName = $months[$selectedMonth] ?? '';
     <?php endif; ?>
   </div>
 
-  <!-- PURCHASE Invoices -->
+  <!-- PURCHASE Invoices Section -->
   <div class="mt-4">
     <h4>PURCHASE Invoices</h4>
     <?php if (!empty($purchaseInvoices)): ?>
@@ -195,6 +220,7 @@ $monthName = $months[$selectedMonth] ?? '';
         $sumCgstPur    = 0;
         $sumSgstPur    = 0;
         $sumTotalPur   = 0;
+
         foreach ($purchaseInvoices as $inv):
           $sumTaxablePur += $inv['taxable_amount'];
           $sumCgstPur    += $inv['cgst'];
@@ -214,6 +240,7 @@ $monthName = $months[$selectedMonth] ?? '';
             <td><?php echo number_format($inv['total'], 2); ?></td>
           </tr>
         <?php endforeach; ?>
+          <!-- Totals row -->
           <tr class="fw-bold table-secondary">
             <td colspan="6" class="text-end">TOTAL:</td>
             <td><?php echo number_format($sumTaxablePur, 2); ?></td>
@@ -230,7 +257,6 @@ $monthName = $months[$selectedMonth] ?? '';
 
 </div><!-- container -->
 
-<!-- Optional Bootstrap JS (for advanced components) -->
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-kenU1KFdBIe4zVF0s0G1M5b4hcpxyD9F7jL+CrUpAgiT9G..."
         crossorigin="anonymous"></script>
